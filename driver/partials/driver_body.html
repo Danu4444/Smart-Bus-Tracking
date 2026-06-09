@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Driver App - Smart Bus Tracker</title>
+    <link rel="stylesheet" href="../styles.css?v=2" />
+    <script src="../js/ui-helpers.js"></script>
+    <script src="../js/password-input.js"></script>
+</head>
+<body class="page-driver">
+
+    <!-- TOP NAVIGATION BAR -->
+    <div class="top-bar">
+        <h1>Driver Console <span class="driver-badge" id="driverName">---</span></h1>
+        <div style="position:relative;">
+            <button id="profileToggle" class="logout" style="border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:6px 12px; background:transparent; color:#fff; cursor:pointer;">Profile</button>
+            <div id="driverProfileDropdown" class="dropdown-panel" style="display:none; position:absolute; right:0; top:46px;">
+                <p style="font-size:0.78rem; color:#94a3b8; margin-bottom:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em;">Update Profile</p>
+                <input type="text" id="driverNewName" placeholder="New Username">
+                <input type="password" id="driverNewPass" placeholder="New Password" data-password-toggle autocomplete="new-password">
+                <button onclick="updateDriverProfile()" style="margin-bottom:8px; font-size:0.88rem; padding:10px;">Save Changes</button>
+                <button onclick="logoutDriver()" style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.4); color:#ef4444; font-size:0.88rem; padding:10px; margin-bottom:0; transition:0.3s;">Logout</button>
+                <div id="driverProfileMsg" style="font-size:0.8rem; margin-top:10px; display:none; text-align:center;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-wrap">
+
+        <!-- TRIP SETUP CARD -->
+        <div class="card">
+            <p class="card-title">🗺 Trip Configuration</p>
+
+            <label>Select Bus</label>
+            <select id="busSelect">
+                <option value="">Loading buses...</option>
+            </select>
+
+            <a href="#" class="add-link" onclick="document.getElementById('addBusDiv').style.display='block'; return false;">+ Register New Bus</a>
+
+            <div id="addBusDiv" style="display:none;">
+                <label>Bus Number (e.g. KA-19-A-9988)</label>
+                <input type="text" id="new_bus_id" placeholder="KA-19-A-9988">
+                <label>Agency Name</label>
+                <input type="text" id="new_bus_name" placeholder="Sugama Travels">
+                <div id="newBusMsg" style="color:#ef4444; font-size:0.83rem; margin-bottom:10px;"></div>
+                <button onclick="registerBus()" style="padding:11px; font-size:0.88rem; margin-bottom:0;">Submit</button>
+            </div>
+
+            <datalist id="cityList"></datalist>
+
+            <label>Starting City</label>
+            <input type="text" id="fromCity" list="cityList" placeholder="e.g. Mangalore">
+
+            <label>Destination City</label>
+            <input type="text" id="toCity" list="cityList" placeholder="e.g. Bangalore" style="margin-bottom:0;">
+        </div>
+
+        <!-- CONTROLS CARD -->
+        <div class="card">
+            <p class="card-title">🎛 Operational Controls</p>
+
+            <label>Passenger Density</label>
+            <div style="display:flex; margin-bottom:16px;">
+                <button id="btnCrowdLow" class="toggle-btn" onclick="setCrowd('Low')">🟢 Empty</button>
+                <button id="btnCrowdMed" class="toggle-btn active yellow" onclick="setCrowd('Medium')">🟡 Medium</button>
+                <button id="btnCrowdHigh" class="toggle-btn" onclick="setCrowd('Full')">🔴 Packed</button>
+            </div>
+
+            <label>System Status</label>
+            <div style="display:flex; margin-bottom:0;">
+                <button id="btnStatusRunning" class="toggle-btn active green" onclick="setStatus('Running')">▶ Running</button>
+                <button id="btnStatusBreak" class="toggle-btn" onclick="setStatus('On Break')">⏸ On Break</button>
+            </div>
+        </div>
+
+        <!-- ACTION BUTTONS CARD -->
+        <div class="card" style="display:flex; flex-direction:column; gap:10px; padding:20px;">
+            <button id="startBtn" onclick="startTracking()">📡 Start Transmitting Location</button>
+            <button id="stopBtn" onclick="stopTracking()" style="display:none;">⏹ Stop Transmission</button>
+            <button id="sosBtn" onclick="openSosModal()" style="display:none;">🚨 TRIGGER SOS ALERT</button>
+        </div>
+
+        <!-- STATUS + GPS CARD -->
+        <div class="card" style="display:flex; flex-direction:column; gap:12px; padding:18px;">
+            <div class="status-row">
+                <span id="indicator" class="indicator"></span>
+                <span id="statusText">Network Idle</span>
+            </div>
+            <div class="coords" id="coordsBox" style="display:none;">
+                <div><span>Latitude</span><span id="lat">0</span></div>
+                <div><span>Longitude</span><span id="lng">0</span></div>
+            </div>
+        </div>
+
+        <!-- DISPATCH COMM CARD -->
+        <div id="driverChatBox" class="card" style="display:none; padding:18px;">
+            <div class="chat-title">📡 Dispatch Comm</div>
+            <div id="driverChatList" class="chat-box" style="border:none; padding:0; margin:0;"></div>
+        </div>
+
+        <!-- TERMINATE -->
+        <button id="terminateBtn" onclick="logout()">✕ Terminate Session</button>
+
+    </div>
+
+    <!-- SOS REPORT MODAL -->
+    <div id="sosModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+        <div class="card" style="border: 2px solid #f43f5e; box-shadow:0 0 30px rgba(244,63,94,0.25); max-width:420px; width:90%;">
+            <h2 style="color:#f43f5e; margin-bottom:8px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:1.3rem;">🚨 Emergency Report</h2>
+            <p style="color:#6b7280; font-size:0.88rem; margin-bottom:20px; text-align:center;">Admin will be alerted instantly with your location.</p>
+            
+            <label style="color:#e2e8f0; font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Select Issue</label>
+            <select id="sosIssue" class="input" style="margin-bottom:16px;">
+                <option value="Mechanical Breakdown">Mechanical Breakdown</option>
+                <option value="Accident">Accident / Collision</option>
+                <option value="Medical Emergency">Passenger Medical Emergency</option>
+                <option value="Road Blocked">Severe Road Block / Protest</option>
+                <option value="Other">Other Critical Issue</option>
+            </select>
+            
+            <label style="color:#e2e8f0; font-size:0.85rem; font-weight:600; display:block; margin-bottom:6px;">Additional Details (Optional)</label>
+            <textarea id="sosMessage" placeholder="Describe what happened..." style="width:100%; height:90px; padding:12px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:#fff; margin-bottom:20px; font-family:'Inter'; resize:none; font-size:0.9rem; transition:0.3s;"></textarea>
+            
+            <div style="display:flex; gap:10px;">
+                <button id="sosDispatchBtn" onclick="submitSos()" style="flex:1; background:#f43f5e; color:white; font-weight:600; border:none; border-radius:8px;">🚨 Dispatch Alert</button>
+                <button onclick="closeSosModal()" style="flex:1; background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; transition:0.3s;">Cancel</button>
+            </div>
+            <div id="sosResponseText" style="margin-top:14px; color:#10b981; font-weight:bold; text-align:center;"></div>
+        </div>
+    </div>
+
+    <!-- LOST ITEM RESOLUTION OVERLAY -->
+    <div id="lostModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+        <div class="card" style="border: 1px solid rgba(56,189,248,0.5); box-shadow:0 0 30px rgba(56,189,248,0.2);">
+            <h2 style="color:#60a5fa; margin-bottom:10px; display:flex; justify-content:center; align-items:center; gap:8px;"> Lost Item Alert!</h2>
+            <div style="text-align:left; color:#fff; font-size:0.9rem; margin-bottom:20px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); padding:15px; border-radius:8px;">
+                <strong style="color:#94a3b8;">Passenger Name:</strong> <span id="liName"></span><br>
+                <strong style="color:#94a3b8;">Passenger Phone:</strong> <span id="liPhone"></span><br><br>
+                <strong style="color:#94a3b8;">Item Description:</strong> <p id="liDesc" style="font-weight:600; color:#f43f5e; margin-top:5px;"></p>
+            </div>
+            <button onclick="markItemFound()" style="background:#10b981; color:#fff; font-size:1.1rem; padding:15px; border-radius:8px;"> Okay, we will search for your item</button>
+            <input type="hidden" id="liId" value="">
+        </div>
+    </div>
+
+    <script>
+        
+
+        const S = window.__DRIVER_SESSION__ || {};
+        const driverUser = S.username || '';
+        let assignedBus = S.assigned_bus || '';
+        const isLocal = location.pathname.includes('bus tracker') || location.pathname.includes('bus%20tracker') || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.includes('192.168.') || location.hostname.includes('lhr.life') || location.hostname.includes('serveo.net');
+        const BASE = isLocal ? '/bus tracker' : '';
+        const LOGOUT_ENDPOINT = `${BASE}/logout.php`;
+        function apiFetch(url, options = {}) {
+            return fetch(url, Object.assign({ credentials: 'same-origin' }, options));
+        }
+
+        if (!driverUser) {
+            window.location.href = "driverLogin.html";
+        } else {
+            document.getElementById('driverName').innerText = driverUser;
+            document.getElementById('profileToggle').innerText = driverUser;
+            hydrateAssignedBus().then(loadBuses);
+            loadCities();
+        }
+
+        async function hydrateAssignedBus() {
+            try {
+                const res = await apiFetch(`${BASE}/api/getDriverAssignedBus.php?username=${encodeURIComponent(driverUser)}`);
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    if (!data.is_active) {
+                        uiAlert("Your account is disabled by admin.").then(() => {
+                            window.location.href = LOGOUT_ENDPOINT;
+                        });
+                        return;
+                    }
+                    assignedBus = data.bus_id || '';
+                }
+            } catch (e) {}
+        }
+
+        async function loadBuses() {
+            try {
+                const res = await apiFetch(`${BASE}/api/getBuses.php`);
+                const data = await res.json();
+                const sel = document.getElementById('busSelect');
+                sel.innerHTML = '<option value="">-- Select Fleet Vehicle --</option>';
+                if(data.buses) {
+                    data.buses.forEach(b => {
+                        if (!assignedBus || assignedBus === b.bus_id) {
+                            sel.innerHTML += `<option value="${b.bus_id}">${b.bus_id} (${b.bus_name})</option>`;
+                        }
+                    });
+                    if (assignedBus) sel.value = assignedBus;
+                }
+            } catch (err) {
+                document.getElementById('busSelect').innerHTML = '<option value="">Error loading buses</option>';
+            }
+        }
+
+        async function registerBus() {
+            const bid = document.getElementById('new_bus_id').value;
+            const bname = document.getElementById('new_bus_name').value;
+            const msg = document.getElementById('newBusMsg');
+            
+            try {
+                const res = await apiFetch(`${BASE}/api/addBus.php`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bus_id: bid, bus_name: bname })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    msg.style.color = '#10b981';
+                    msg.innerText = data.message;
+                    setTimeout(() => {
+                        document.getElementById('addBusDiv').style.display='none';
+                        msg.innerText = '';
+                        document.getElementById('new_bus_id').value = '';
+                        document.getElementById('new_bus_name').value = '';
+                    }, 2000);
+                    loadBuses(); // refresh dropdown
+                } else {
+                    msg.style.color = '#f43f5e';
+                    msg.innerText = data.error || "Failed validation";
+                }
+            } catch(e) { msg.innerText = "Network Error"; }
+        }
+
+        async function loadCities() {
+            try {
+                const res = await apiFetch(`${BASE}/api/getCities.php`);
+                const data = await res.json();
+                if(data.cities) {
+                    const dataList = document.getElementById('cityList');
+                    dataList.innerHTML = '';
+                    data.cities.forEach(c => {
+                        dataList.innerHTML += `<option value="${c}">`;
+                    });
+                }
+            } catch(e) {}
+        }
+
+        let watchId = null;
+        let activeBusId = null;
+        let activeFrom = null;
+        let activeTo = null;
+        let activeCrowd = 'Medium';
+        let activeStatus = 'Running';
+        let lostItemInterval = null;
+        let chatInterval = null;
+        let sosActive = false;
+        const apiEndpoint = `${BASE}/api/updateLocation.php`;
+
+        function setCrowd(level) {
+            activeCrowd = level;
+            document.getElementById('btnCrowdLow').style.background = '#555';
+            document.getElementById('btnCrowdLow').style.color = 'white';
+            document.getElementById('btnCrowdMed').style.background = '#555';
+            document.getElementById('btnCrowdMed').style.color = 'white';
+            document.getElementById('btnCrowdHigh').style.background = '#555';
+            document.getElementById('btnCrowdHigh').style.color = 'white';
+
+            if(level === 'Low') {
+                document.getElementById('btnCrowdLow').style.background = '#22c55e';
+            } else if (level === 'Medium') {
+                document.getElementById('btnCrowdMed').style.background = '#eab308';
+                document.getElementById('btnCrowdMed').style.color = '#121212';
+            } else if (level === 'Full') {
+                document.getElementById('btnCrowdHigh').style.background = '#ef4444';
+            }
+        }
+
+        function setStatus(status) {
+            activeStatus = status;
+            document.getElementById('btnStatusRunning').style.background = '#555';
+            document.getElementById('btnStatusBreak').style.background = '#555';
+            
+            if(status === 'Running') {
+                document.getElementById('btnStatusRunning').style.background = '#22c55e';
+            } else if(status === 'On Break') {
+                document.getElementById('btnStatusBreak').style.background = '#eab308';
+            }
+        }
+
+        function openSosModal() {
+            document.getElementById('sosModal').style.display = 'flex';
+        }
+
+        function closeSosModal() {
+            document.getElementById('sosModal').style.display = 'none';
+        }
+
+        async function submitSos() {
+            const issue = document.getElementById('sosIssue').value;
+            const message = document.getElementById('sosMessage').value;
+            // Use activeBusId if transmission is running, else fall back to the selected bus in dropdown
+            const busFallback = activeBusId || document.getElementById('busSelect').value || 'UNKNOWN';
+            
+            if (!driverUser) {
+                uiAlert("Driver session not found. Please log in again.");
+                return;
+            }
+
+            const btnDispatch = document.getElementById('sosDispatchBtn');
+            if (btnDispatch) { btnDispatch.disabled = true; btnDispatch.textContent = 'Sending...'; }
+
+            try {
+                const res = await apiFetch(`${BASE}/api/reportEmergency.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        bus_id: busFallback,
+                        driver_username: driverUser,
+                        issue_type: issue,
+                        message: message
+                    })
+                });
+                
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showToast("SOS emergency dispatched. Admin has been notified.", "success");
+                    closeSosModal();
+                    sosActive = true;
+                    activeStatus = 'Breakdown';
+                    document.getElementById('btnStatusRunning').style.background = '#555';
+                    document.getElementById('btnStatusBreak').style.background = '#555';
+                } else {
+                    showToast("Failed to send SOS: " + (data.error || "Unknown error. Please try again."), "error");
+                }
+            } catch(e) {
+                showToast("Network error sending SOS. Check your connection.", "error");
+            } finally {
+                if (btnDispatch) { btnDispatch.disabled = false; btnDispatch.textContent = '🚨 Dispatch Alert'; }
+            }
+        }
+
+
+        async function logout() {
+            if (!(await uiConfirm("Terminate session and log out?"))) return;
+            await stopTracking();
+            window.location.href = LOGOUT_ENDPOINT;
+        }
+
+        async function startTracking() {
+            activeBusId = document.getElementById('busSelect').value;
+            activeFrom = document.getElementById('fromCity').value;
+            activeTo = document.getElementById('toCity').value;
+            sosActive = false;
+            activeStatus = 'Running'; // Default to running on start
+
+            if (!activeBusId || !activeFrom || !activeTo) {
+                await uiAlert("Please select a Bus Plate, Starting City, and Destination City!");
+                return;
+            }
+            if (activeFrom === activeTo) {
+                await uiAlert("Starting City and Destination cannot be the same.");
+                return;
+            }
+
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'block';
+            document.getElementById('sosBtn').style.display = 'block';
+
+            if (!navigator.geolocation) {
+                updateStatus("Geolocation not supported", "error");
+                return;
+            }
+
+            document.getElementById("busSelect").disabled = true;
+            document.getElementById("fromCity").disabled = true;
+            document.getElementById("toCity").disabled = true;
+            document.getElementById("startBtn").style.display = "none";
+            document.getElementById("stopBtn").style.display = "block";
+            document.getElementById("coordsBox").style.display = "block";
+            document.getElementById("driverChatBox").style.display = "block";
+            
+            updateStatus("Acquiring GPS...", "active");
+
+            // Start Lost Item Polling
+            if(lostItemInterval) clearInterval(lostItemInterval);
+            lostItemInterval = setInterval(checkLostItems, 10000); // Check every 10 seconds
+            chatInterval = setInterval(pollChat, 3000);
+
+            watchId = navigator.geolocation.watchPosition(
+                (position) => sendLocation(position),
+                (error) => handleLocationError(error),
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0
+                }
+            );
+
+            resolveDestinationCoordinates(activeTo);
+        }
+
+        async function checkLostItems() {
+            if(!activeBusId) return;
+            try {
+                const res = await apiFetch(`${BASE}/api/getLostItems.php?bus_id=${activeBusId}`);
+                const data = await res.json();
+                if(data.items && data.items.length > 0) {
+                    const item = data.items[0]; // grab most recent
+                    document.getElementById('liId').value = item.id;
+                    document.getElementById('liName').innerText = item.passenger_name;
+                    document.getElementById('liPhone').innerText = item.passenger_phone;
+                    document.getElementById('liDesc').innerText = item.item_description;
+                    document.getElementById('lostModal').style.display = 'flex';
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function markItemFound() {
+            const itemId = document.getElementById('liId').value;
+            try {
+                const res = await apiFetch(`${BASE}/api/resolveLostItem.php`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({item_id: itemId})
+                });
+                if(res.ok) {
+                    document.getElementById('lostModal').style.display = 'none';
+                    showToast("Marked as found. Thank you!", "success");
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        let mockGpsInterval = null;
+        let mockLat = 12.9141; // Default starting mock Lat (Mangalore roughly)
+        let mockLng = 74.8560; // Default starting mock Lng
+        let destinationCoords = null;
+
+        async function resolveDestinationCoordinates(city) {
+            destinationCoords = null;
+            try {
+                const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(city + ', Karnataka, India')}&limit=1`;
+                const res = await fetch(url);
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    destinationCoords = {
+                        lat: parseFloat(data[0].lat),
+                        lng: parseFloat(data[0].lon)
+                    };
+                }
+            } catch (e) {}
+        }
+
+        function haversineMeters(lat1, lon1, lat2, lon2) {
+            const toRad = (v) => (v * Math.PI) / 180;
+            const R = 6371000;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        async function stopTracking() {
+            const closingDriver = driverUser;
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            if (mockGpsInterval !== null) {
+                clearInterval(mockGpsInterval);
+                mockGpsInterval = null;
+            }
+            if(chatInterval) {
+                clearInterval(chatInterval);
+                chatInterval = null;
+            }
+            activeBusId = null;
+            activeFrom = null;
+            activeTo = null;
+            
+            if(lostItemInterval) {
+                clearInterval(lostItemInterval);
+                lostItemInterval = null;
+            }
+            document.getElementById("driverChatBox").style.display = "none";
+            document.getElementById("busSelect").disabled = false;
+            document.getElementById("fromCity").disabled = false;
+            document.getElementById("toCity").disabled = false;
+            document.getElementById("startBtn").style.display = "block";
+            document.getElementById("stopBtn").style.display = "none";
+            updateStatus("Offline", "");
+            try {
+                await apiFetch(`${BASE}/api/endTrip.php`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ driver_username: closingDriver, reason: 'manual' }),
+                    keepalive: true
+                });
+            } catch (e) {
+                console.error("Error ending trip", e);
+            }
+        }
+
+        async function pollChat() {
+            try {
+                const res = await apiFetch(`${BASE}/api/getMsgs.php?bus_id=${activeBusId}`);
+                const data = await res.json();
+                if(data.chats && data.chats.length > 0) {
+                    const list = document.getElementById('driverChatList');
+                    list.innerHTML = '';
+                    data.chats.forEach(m => {
+                        list.innerHTML += `
+                            <div style="margin-bottom:4px;">
+                                <small style="color:#94a3b8; font-size:0.72rem;">${m.sender_type === 'passenger' ? 'Passenger' : 'Admin'}</small>
+                                <div style="background:${m.sender_type === 'passenger' ? 'rgba(59,130,246,0.15)' : 'rgba(255,255,255,0.08)'}; border:1px solid ${m.sender_type === 'passenger' ? 'rgba(59,130,246,0.3)' : 'rgba(255,255,255,0.2)'}; color:#fff; padding:8px 12px; border-radius:8px; font-size:0.85rem; margin-top:2px;">
+                                    ${m.message}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            } catch(e) { console.error("Chat poll error", e); }
+        }
+
+        function sendLocation(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            if (destinationCoords) {
+                const distToDestination = haversineMeters(lat, lng, destinationCoords.lat, destinationCoords.lng);
+                if (distToDestination <= 200) {
+                    showToast("Destination reached within 200m. Trip ended automatically.", "success");
+                    stopTracking();
+                    return;
+                }
+            }
+            
+            document.getElementById("lat").innerText = lat.toFixed(6);
+            document.getElementById("lng").innerText = lng.toFixed(6);
+            updateStatus("Broadcasting...", "active");
+
+            apiFetch(`${BASE}/api/updateLocation.php`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    driver_username: driverUser,
+                    bus_id: activeBusId, 
+                    from_city: activeFrom, 
+                    to_city: activeTo, 
+                    crowd_level: activeCrowd,
+                    status: activeStatus,
+                    latitude: lat, 
+                    longitude: lng 
+                })
+            })
+            .then(async (response) => {
+                const data = await response.json();
+                if (!response.ok) {
+                    updateStatus(data.error || "Transmit failed", "error");
+                    return;
+                }
+                updateStatus("Live transmit ok", "active");
+            })
+            .catch(error => {
+                console.error("Error sending location:", error);
+                updateStatus("API Network Error", "error");
+            });
+        }
+
+        async function handleLocationError(error) {
+            console.error(error);
+            let errMsg = "Unknown Error";
+            if (error.code === error.PERMISSION_DENIED) errMsg = "Permission Denied (Requires HTTPS)";
+            if (error.code === error.POSITION_UNAVAILABLE) errMsg = "GPS Unavailable";
+            if (error.code === error.TIMEOUT) errMsg = "GPS Timeout";
+
+            updateStatus(errMsg, "error");
+
+            const useMock = await uiConfirm("GPS Error: " + errMsg + ".\n\nWould you like to simulate a Mock GPS for local testing?");
+            if (useMock) {
+                updateStatus("Simulating Mock GPS...", "active");
+                if (mockGpsInterval) clearInterval(mockGpsInterval);
+
+                mockLat = 12.7686 + (Math.random() * 0.1);
+                mockLng = 75.2070 + (Math.random() * 0.1);
+
+                mockGpsInterval = setInterval(() => {
+                    mockLat += 0.0002;
+                    mockLng += 0.0002;
+                    sendLocation({
+                        coords: { latitude: mockLat, longitude: mockLng }
+                    });
+                }, 3000);
+            }
+        }
+
+        function updateStatus(text, className) {
+            document.getElementById("statusText").innerText = text;
+            const indicator = document.getElementById("indicator");
+            indicator.className = "indicator";
+            if (className) indicator.classList.add(className);
+        }
+
+        document.getElementById('profileToggle').addEventListener('click', () => {
+            const el = document.getElementById('driverProfileDropdown');
+            el.style.display = el.style.display === 'none' ? 'block' : 'none';
+        });
+
+        async function updateDriverProfile() {
+            const u = document.getElementById('driverNewName').value;
+            const p = document.getElementById('driverNewPass').value;
+            const msg = document.getElementById('driverProfileMsg');
+            msg.style.display = 'none'; msg.className = '';
+            try {
+                const res = await apiFetch(`${BASE}/api/updateDriver.php`, {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({username: u, password: p})
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    msg.innerText = "Profile updated!";
+                    msg.style.color = "#10b981"; msg.style.display = "block";
+                    if(u) {
+                        document.getElementById("driverName").innerText = u;
+                    }
+                } else {
+                    msg.innerText = data.error; 
+                    msg.style.color = "#f43f5e"; msg.style.display = "block";
+                }
+            } catch (e) {
+                msg.innerText = "Network Error";
+                msg.style.color = "#f43f5e"; msg.style.display = "block";
+            }
+        }
+
+        async function logoutDriver() {
+            if (!(await uiConfirm("Log out of the driver app?"))) return;
+            window.location.href = LOGOUT_ENDPOINT;
+        }
+    </script>
+</body>
+</html>

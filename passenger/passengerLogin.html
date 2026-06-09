@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Passenger Login</title>
+    <link rel="stylesheet" href="../styles.css" />
+
+    <style>
+        body.auth-page {
+            margin: 0;
+            font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* 🔥 Glass Card */
+        .auth-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 30px;
+            width: 350px;
+            color: white;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.8s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        .input-group label {
+            font-size: 14px;
+            color: #94a3b8;
+        }
+
+        .input {
+            width: 100%;
+            padding: 10px;
+            border-radius: 10px;
+            border: none;
+            margin-top: 5px;
+            outline: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            transition: 0.3s;
+        }
+
+        .input:focus {
+            box-shadow: 0 0 10px #2563eb;
+        }
+
+        /* 🔥 Buttons */
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2563eb, #4f46e5);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(79, 70, 229, 0.4);
+        }
+
+        .btn-secondary {
+            background: #22c55e;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #16a34a;
+        }
+
+        /* Links */
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        .auth-back-link {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+        }
+
+        /* Error */
+        .error {
+            margin-top: 10px;
+            color: #ef4444;
+            text-align: center;
+        }
+    </style>
+
+</head>
+
+<body class="auth-page">
+
+    <a id="backLink" href="#" class="auth-back-link">← Back</a>
+
+    <div class="auth-card">
+        <h1>Passenger Login</h1>
+        <p style="text-align:center;color:#94a3b8;">Access your tracking tools</p>
+
+        <form id="loginForm">
+            <div class="input-group">
+                <label>Phone number</label>
+                <input type="tel" id="phone" class="input" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10-digit mobile" required />
+            </div>
+
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" id="password" class="input" placeholder="Password" required data-password-toggle autocomplete="current-password" />
+            </div>
+
+            <button type="submit" id="loginBtn" class="btn btn-primary">Login</button>
+
+            <p style="text-align:center;margin-top:15px;">
+                New user? <a href="#" id="showRegister">Create an account</a>
+            </p>
+        </form>
+
+        <form id="registerForm" style="display:none;">
+            <div class="input-group">
+                <label>Phone number</label>
+                <input type="tel" id="regPhone" class="input" inputmode="numeric" pattern="\d{10}" maxlength="10" placeholder="10-digit mobile" />
+            </div>
+
+            <div class="input-group">
+                <label>Password</label>
+                <input type="password" id="regPass" class="input" data-password-toggle autocomplete="new-password" />
+            </div>
+
+            <button type="submit" id="regBtn" class="btn btn-secondary">Register</button>
+
+            <p style="text-align:center;margin-top:10px;">
+                <a href="#" id="showLogin">Back to login</a>
+            </p>
+        </form>
+
+        <div id="errorMsg" class="error"></div>
+    </div>
+
+    <script src="../js/password-input.js"></script>
+    <script>
+        const APP_ENTRY = '../app/index.html';
+
+        document.getElementById('backLink').href = '../index.html';
+
+        document.getElementById('showRegister').addEventListener('click', function (e) {
+            e.preventDefault();
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+        });
+        document.getElementById('showLogin').addEventListener('click', function (e) {
+            e.preventDefault();
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
+        });
+
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const phone = document.getElementById('phone').value.trim();
+            const password = document.getElementById('password').value;
+            const err = document.getElementById('errorMsg');
+
+            const cleanedPhone = phone.replace(/\D/g, '');
+            if (cleanedPhone.length !== 10) {
+                err.style.display = 'block';
+                err.style.color = '';
+                err.textContent = 'Please enter a valid 10-digit phone number.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            err.style.display = 'none';
+            try {
+                const res = await fetch('../api/passengerLogin.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ phone: cleanedPhone, password: password })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    window.location.href = APP_ENTRY;
+                } else {
+                    err.textContent = data.error || 'Login failed';
+                    err.style.display = 'block';
+                }
+            } catch (x) {
+                err.textContent = 'Network error';
+                err.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Login';
+            }
+        });
+
+        document.getElementById('registerForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const btn = document.getElementById('regBtn');
+            const phone = document.getElementById('regPhone').value.trim();
+            const password = document.getElementById('regPass').value;
+            const err = document.getElementById('errorMsg');
+
+            const cleaned = phone.replace(/\D/g, '');
+            if (cleaned.length !== 10) {
+                err.style.display = 'block';
+                err.style.color = '';
+                err.textContent = 'Please enter a valid 10-digit phone number.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Registering...';
+            err.style.display = 'none';
+            try {
+                const res = await fetch('../api/passengerRegister.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ phone: cleaned, password: password })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    err.style.display = 'block';
+                    err.style.color = '#059669';
+                    err.textContent = data.message || 'Registered. Please log in.';
+                    document.getElementById('registerForm').style.display = 'none';
+                    document.getElementById('loginForm').style.display = 'block';
+                } else {
+                    err.style.color = '';
+                    err.textContent = data.error || 'Registration failed';
+                    err.style.display = 'block';
+                }
+            } catch (x) {
+                err.textContent = 'Network error';
+                err.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Register';
+            }
+        });
+    </script>
+
+</body>
+
+</html>

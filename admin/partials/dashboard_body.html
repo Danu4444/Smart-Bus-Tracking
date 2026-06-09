@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fleet Command Center</title>
+    <link rel="stylesheet" href="../styles.css?v=2" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="../js/ui-helpers.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body class="page-admin">
+
+<div class="app-shell">
+    <aside class="sidebar" aria-label="Admin navigation">
+        <div class="sidebar-brand">Fleet Command</div>
+        <span class="sidebar-section">Overview</span>
+        <a href="#admin-map" class="sidebar-link active">Live map</a>
+        <span class="sidebar-section">Directory</span>
+        <a href="#section-drivers" class="sidebar-link">Drivers</a>
+        <a href="#section-fleet" class="sidebar-link">Fleet</a>
+        <a href="#section-lost" class="sidebar-link">Lost &amp; found</a>
+
+        <span class="sidebar-section">Account</span>
+        <a href="#section-profile" class="sidebar-link">Profile Settings</a>
+        <a id="logoutLinkSidebar" href="#" class="sidebar-link" style="color:#fca5a5;">Logout</a>
+    </aside>
+
+    <div class="app-main">
+        <header class="navbar">
+            <span class="navbar-brand">Smart Bus — Admin</span>
+        </header>
+
+        <div class="admin-dashboard-body">
+            <section id="admin-map" class="admin-map-section">
+                <div class="admin-map-wrapper">
+                    <div id="map"></div>
+                </div>
+            </section>
+
+            <section id="section-sos" class="admin-content-grid">
+                <div class="card admin-card admin-card--sos">
+                    <h3>Active SOS &amp; Breakdowns</h3>
+                    <ul class="sos-list" id="sosList">
+                        <li class="sos-item" style="justify-content:center;color:#94a3b8;">Scanning...</li>
+                    </ul>
+                </div>
+
+                <div class="card admin-card" id="section-register">
+                    <h3>Register Driver</h3>
+                    <div id="msgBox" class="msg"></div>
+                    <form id="regForm">
+                        <div class="form-group">
+                            <label for="username">Unique Driver Username</label>
+                            <input type="text" id="username" class="input" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Driver Password</label>
+                            <input type="password" id="password" class="input" required data-password-toggle autocomplete="new-password">
+                        </div>
+                        <button type="submit" id="regBtn">Create Profile</button>
+                    </form>
+                </div>
+
+                <div class="card admin-card" id="section-drivers">
+                    <h3>System Drivers</h3>
+                    <ul class="driver-list" id="driverList">
+                        <li class="driver-item" style="justify-content:center;color:#94a3b8;">Loading...</li>
+                    </ul>
+                </div>
+
+                <div class="card admin-card" id="section-fleet">
+                    <h3>Registered Fleet</h3>
+                    <ul class="driver-list" id="fleetList">
+                        <li class="driver-item" style="justify-content:center;color:#94a3b8;">Loading...</li>
+                    </ul>
+                </div>
+
+                <div class="card admin-card">
+                    <h3>Register Fleet Bus</h3>
+                    <div id="busMsgBox" class="msg"></div>
+                    <form id="busForm">
+                        <div class="form-group">
+                            <label for="bus_id">Bus Structure (e.g. KA-19-A-9988)</label>
+                            <input type="text" id="bus_id" class="input" placeholder="KA-19-A-9988" required />
+                        </div>
+                        <div class="form-group">
+                            <label for="bus_name">Bus Agency Name</label>
+                            <input type="text" id="bus_name" class="input" placeholder="E.g. Sugama Travels" required />
+                        </div>
+                        <button type="submit" id="addBusBtn">Register Vehicle</button>
+                    </form>
+                </div>
+
+                <div class="card admin-card" id="section-lost">
+                    <h3>Lost &amp; Found Feed</h3>
+                    <ul class="driver-list" id="lostFeed">
+                        <li class="driver-item" style="justify-content:center;color:#94a3b8;">Loading...</li>
+                    </ul>
+                </div>
+
+                <div class="card admin-card" id="section-profile">
+                    <h3>Admin Profile Settings</h3>
+                    <div id="profileMsg" class="msg"></div>
+                    <form onsubmit="event.preventDefault(); updateAdminProfile();">
+                        <div class="form-group">
+                            <label for="adminNewName">Update Username</label>
+                            <input type="text" id="adminNewName" class="input" placeholder="New Username">
+                        </div>
+                        <div class="form-group">
+                            <label for="adminNewPass">Update Password</label>
+                            <input type="password" id="adminNewPass" class="input" placeholder="New Password" data-password-toggle autocomplete="new-password">
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Profile</button>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script src="../js/password-input.js"></script>
+<script>
+// --- Leaflet Map Init ---
+const map = L.map('map').setView([12.9141, 74.8560], 8); // default to Mangalore 
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OSM</a>'
+}).addTo(map);
+
+let markers = {};
+const isLocal = location.pathname.includes('bus tracker') || location.pathname.includes('bus%20tracker') || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.includes('192.168.') || location.hostname.includes('lhr.life') || location.hostname.includes('serveo.net');
+const BASE = isLocal ? '/bus tracker' : '';
+const LOGOUT_ENDPOINT = `${BASE}/logout.php`;
+const ADMIN_LOGIN_ENDPOINT = `${BASE}/admin/adminLogin.html`;
+function apiFetch(url, options = {}) {
+    return fetch(url, Object.assign({ credentials: 'same-origin' }, options));
+}
+document.getElementById('logoutLinkSidebar').addEventListener('click', async function(e) {
+    e.preventDefault();
+    if (await uiConfirm('Log out of the admin dashboard?')) {
+        window.location.href = LOGOUT_ENDPOINT;
+    }
+});
+
+// Custom Icons with clean SVG rendering
+const iconRunning = L.divIcon({ html: '<svg style="color:#2563eb; border-radius:50%; background:#ffffff; border:2px solid #2563eb; padding:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"></rect><path d="M9 2v2"></path><path d="M15 2v2"></path><path d="M4 11h16"></path><path d="M8 15h.01"></path><path d="M16 15h.01"></path><path d="M6 22v-2"></path><path d="M18 22v-2"></path></svg>', iconSize: [32, 32], className: '' });
+const iconStalled = L.divIcon({ html: '<svg style="color:#d97706; border-radius:50%; background:#ffffff; border:2px solid #d97706; padding:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="16" height="20" x="4" y="2" rx="2" ry="2"></rect><path d="M9 2v2"></path><path d="M15 2v2"></path><path d="M4 11h16"></path><path d="M8 15h.01"></path><path d="M16 15h.01"></path><path d="M6 22v-2"></path><path d="M18 22v-2"></path></svg>', iconSize: [36, 36], className: '' });
+const iconSos = L.divIcon({ html: '<svg style="color:#e11d48; border-radius:50%; background:#ffffff; border:2px solid #e11d48; padding:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>', iconSize: [40, 40], className: 'sos-alert' });
+
+// Poll Fleet status
+async function pollFleet() {
+    try {
+        const res = await apiFetch(`${BASE}/api/adminMapData.php`);
+        if (res.status === 401 || res.status === 403) return window.location.href = ADMIN_LOGIN_ENDPOINT;
+        const data = await res.json();
+        
+        let bounds = [];
+        const activeMarkerIds = new Set();
+        data.buses.forEach(b => {
+             if (!b.bus_id || b.latitude === null || b.longitude === null) return;
+
+             // rendering logic
+             let icon = iconRunning;
+             let statHtml = `<br>Status: <b style="color:#10b981">Running</b>`;
+             
+             if (b.status === 'On Break') {
+                 icon = iconStalled; statHtml = `<br>Status: <b style="color:#d97706">On Break</b>`;
+             } else if (b.status === 'Stalled' || b.status === 'Interrupted') {
+                 icon = iconStalled; statHtml = `<br>Status: <b style="color:#f59e0b">Stalled (${b.stalled_mins} mins)</b>`;
+             } else if (b.status === 'SOS' || b.status === 'Alert' || b.status === 'Breakdown') {
+                 icon = iconSos; statHtml = `<br>Status: <b style="color:#f43f5e">SOS EMERGENCY</b>`;
+             }
+
+             const latLng = [b.latitude, b.longitude];
+             activeMarkerIds.add(b.bus_id);
+             const pContent = `
+                <div style="text-align:center;">
+                    <h4 style="margin:0;color:#60a5fa;">${b.bus_name}</h4>
+                    <small style="color:#94a3b8;">${b.bus_id}</small>
+                    ${statHtml}
+                    <br><small style="color:#cbd5e1;">Crowd: ${b.crowd_level}</small>
+                    <br><small style="color:#94a3b8;">Driver: ${b.driver_username || 'Active'}</small>
+                </div>
+             `;
+             
+             if(markers[b.bus_id]) {
+                 markers[b.bus_id].setLatLng(latLng).bindPopup(pContent).setIcon(icon);
+             } else {
+                 markers[b.bus_id] = L.marker(latLng, {icon: icon}).bindPopup(pContent).addTo(map);
+             }
+             bounds.push(latLng);
+        });
+
+        Object.keys(markers).forEach(busId => {
+            if (!activeMarkerIds.has(busId)) {
+                map.removeLayer(markers[busId]);
+                delete markers[busId];
+            }
+        });
+        
+        if (bounds.length > 0 && !window.hasPannedMap) {
+            map.fitBounds(bounds, {padding: [50, 50]});
+            window.hasPannedMap = true;
+        } else if (bounds.length === 0) {
+            window.hasPannedMap = false;
+        }
+
+        const sosList = document.getElementById('sosList');
+        if (data.emergencies && data.emergencies.length > 0) {
+            sosList.innerHTML = '';
+            data.emergencies.forEach(e => {
+                sosList.innerHTML += `
+                    <li class="sos-item sos-alert" style="flex-direction:column; align-items:flex-start;">
+                        <div style="display:flex; justify-content:space-between; width:100%; margin-bottom:6px; align-items:center;">
+                            <strong style="color:#f87171; font-size:1rem;">${e.bus_id}</strong>
+                            <span style="background:rgba(239,68,68,0.2); color:#fca5a5; border:1px solid rgba(239,68,68,0.4); font-size:0.75rem; font-weight:600; padding:3px 8px; border-radius:4px;">${e.issue_type}</span>
+                        </div>
+                        <div style="color:#cbd5e1; font-size:0.88rem; margin-bottom:5px;">${e.message || '—'}</div>
+                        <small style="color:#94a3b8;">Driver: <strong style="color:#fff;">${e.driver_username}</strong> &nbsp;|&nbsp; ${new Date(e.created_at).toLocaleTimeString()}</small>
+                    </li>
+                `;
+            });
+            
+        } else {
+            sosList.innerHTML = '<li class="sos-item" style="justify-content:center; color:#10b981; display:flex; gap:5px; align-items:center;"> No Active Emergencies</li>';
+            
+        }
+        
+    } catch(e) { console.error("Fleet polling error:", e); }
+}
+
+setInterval(pollFleet, 3000);
+pollFleet();
+
+async function fetchDrivers() {
+    try {
+        const res = await apiFetch(`${BASE}/api/getDrivers.php`);
+        if (res.status === 401 || res.status === 403) return window.location.href = ADMIN_LOGIN_ENDPOINT;
+        const data = await res.json();
+        const list = document.getElementById('driverList');
+        list.innerHTML = '';
+        if (data.drivers && data.drivers.length > 0) {
+            data.drivers.forEach(d => {
+                const active = parseInt(d.is_active) === 1; // Fix: PDO returns "0"/"1" strings
+                const li = document.createElement('li');
+                li.className = 'driver-item';
+                li.style.cssText = 'flex-direction:column; align-items:flex-start;';
+
+                const topRow = document.createElement('div');
+                topRow.style.cssText = 'display:flex; justify-content:space-between; width:100%; align-items:center;';
+
+                const nameDiv = document.createElement('div');
+                nameDiv.innerHTML = `<strong style="color:#fff;">${d.username}</strong><br><small style="color:#94a3b8">Added: ${new Date(d.created_at).toLocaleDateString()}</small>`;
+
+                const badge = document.createElement('span');
+                badge.className = 'badge';
+                badge.style.cssText = `background:${active ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'}; color:${active ? '#4ade80' : '#f87171'}; border: 1px solid ${active ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'};`;
+                badge.textContent = active ? 'Enabled' : 'Disabled';
+
+                topRow.appendChild(nameDiv);
+                topRow.appendChild(badge);
+
+                const btnRow = document.createElement('div');
+                btnRow.style.cssText = 'display:flex; gap:8px; margin-top:10px; width:100%;';
+
+                const toggleBtn = document.createElement('button');
+                toggleBtn.style.cssText = `flex:1; width:auto; background:${active ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)'}; color:${active ? '#f87171' : '#4ade80'}; border:1px solid ${active ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}; padding:10px; border-radius:6px; cursor:pointer; font-weight:500; margin-bottom:0; transition:0.3s;`;
+                toggleBtn.textContent = active ? 'Disable' : 'Enable';
+                toggleBtn.addEventListener('click', () => driverAction(d.id, active ? 'disable' : 'enable'));
+
+                const resetBtn = document.createElement('button');
+                resetBtn.style.cssText = 'flex:1; width:auto; background:rgba(59,130,246,0.1); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:10px; border-radius:6px; cursor:pointer; font-weight:500; margin-bottom:0; transition:0.3s;';
+                resetBtn.textContent = 'Reset Password';
+                resetBtn.addEventListener('click', () => resetPasswordPrompt(d.id));
+
+                btnRow.appendChild(toggleBtn);
+                btnRow.appendChild(resetBtn);
+                li.appendChild(topRow);
+                li.appendChild(btnRow);
+                list.appendChild(li);
+            });
+        } else {
+            list.innerHTML = '<li class="driver-item">No drivers registered yet.</li>';
+        }
+    } catch(err) { console.error(err); }
+}
+
+async function fetchFleet() {
+    try {
+        const res = await apiFetch(`${BASE}/api/getBuses.php`);
+        const data = await res.json();
+        const list = document.getElementById('fleetList');
+        list.innerHTML = '';
+        if (data.buses && data.buses.length > 0) {
+            data.buses.forEach(b => {
+                list.innerHTML += `<li class="driver-item">
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        
+                        <div>
+                            <strong style="color:#fff;">${b.bus_id}</strong><br>
+                            <small style="color:#94a3b8">${b.bus_name}</small>
+                        </div>
+                    </div>
+                </li>`;
+            });
+            
+        } else {
+            list.innerHTML = '<li class="driver-item">No fleet registered yet.</li>';
+        }
+    } catch(err) { console.error(err); }
+}
+
+document.getElementById('regForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('regBtn');
+    const msg = document.getElementById('msgBox');
+    const u = document.getElementById('username').value;
+    const p = document.getElementById('password').value;
+    
+    btn.disabled = true; msg.style.display = 'none'; msg.className = 'msg';
+    try {
+        const res = await apiFetch(`${BASE}/api/registerDriver.php`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: u, password: p })
+        });
+        const responseText = await res.text();
+        let data = {};
+        try {
+            data = responseText ? JSON.parse(responseText) : {};
+        } catch (parseError) {
+            data = { error: responseText || 'Server returned an invalid response.' };
+        }
+        if (res.ok && data.success) {
+            msg.innerHTML = ` ${data.message}`; msg.classList.add('success'); msg.style.display = 'block';
+            document.getElementById('regForm').reset(); fetchDrivers();
+        } else {
+            msg.innerHTML = ` ${data.error || "Failed"}`; msg.classList.add('error'); msg.style.display = 'block';
+        }
+        
+    } catch(err) {
+        msg.textContent = `Network error: ${err.message || 'Unable to reach registerDriver.php'}`;
+        msg.classList.add('error');
+        msg.style.display = 'block';
+    } finally { btn.disabled = false; }
+});
+fetchDrivers();
+
+document.getElementById('busForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('addBusBtn');
+    const msg = document.getElementById('busMsgBox');
+    const bid = document.getElementById('bus_id').value;
+    const bname = document.getElementById('bus_name').value;
+    
+    btn.disabled = true; msg.style.display = 'none'; msg.className = 'msg';
+    try {
+        const res = await apiFetch(`${BASE}/api/addBus.php`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bus_id: bid, bus_name: bname })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            msg.innerHTML = ` ${data.message}`; msg.classList.add('success'); msg.style.display = 'block';
+            document.getElementById('busForm').reset();
+        } else {
+            msg.innerHTML = ` ${data.error}`; msg.classList.add('error'); msg.style.display = 'block';
+        }
+        
+    } catch(err) {
+        msg.textContent = "Network error connecting to API"; msg.classList.add('error'); msg.style.display = 'block';
+    } finally { btn.disabled = false; }
+});
+
+fetchFleet();
+
+async function fetchInsights() {
+    try {
+        const res = await apiFetch(`${BASE}/api/adminInsights.php`);
+        if (res.status === 401 || res.status === 403) return window.location.href = ADMIN_LOGIN_ENDPOINT;
+        const data = await res.json();
+        const lostFeed = document.getElementById('lostFeed');
+        lostFeed.innerHTML = '';
+
+        const items = (data.lost_items || []).slice(0, 10);
+        if (items.length === 0) {
+            lostFeed.innerHTML = '<li class="driver-item" style="justify-content:center; color:#374151;">No lost items reported.</li>';
+        } else {
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'driver-item';
+                li.style.cssText = 'display:flex; flex-direction:column; gap:6px; align-items:flex-start;';
+                li.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                        <div>
+                            <strong style="color:#fff;">${item.bus_id}</strong>
+                            <span style="color:#94a3b8; font-size:0.85rem;"> &mdash; ${item.passenger_name}</span>
+                        </div>
+                        <span style="background:${item.status === 'Found' ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)'}; color:${item.status === 'Found' ? '#4ade80' : '#fde047'}; border:1px solid ${item.status === 'Found' ? 'rgba(34,197,94,0.3)' : 'rgba(234,179,8,0.3)'}; font-size:0.72rem; font-weight:600; padding:2px 8px; border-radius:4px;">${item.status || 'Lost'}</span>
+                    </div>
+                    <small style="color:#cbd5e1;">${item.item_description}</small>
+                    <div style="display:flex; gap:6px; width:100%; margin-top:4px;">
+                        <button data-phone="${item.passenger_phone}" onclick="contactPassenger(this.dataset.phone)" style="flex:1; width:auto; background:rgba(59,130,246,0.1); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:7px 10px; border-radius:6px; cursor:pointer; font-size:0.82rem; font-weight:500; margin-bottom:0; transition:0.3s;">Message Passenger</button>
+                        <button data-bus="${item.bus_id}" onclick="notifyDriver(this.dataset.bus)" style="flex:1; width:auto; background:rgba(34,197,94,0.1); color:#4ade80; border:1px solid rgba(34,197,94,0.3); padding:7px 10px; border-radius:6px; cursor:pointer; font-size:0.82rem; font-weight:500; margin-bottom:0; transition:0.3s;">Notify Driver</button>
+                    </div>
+                `;
+                lostFeed.appendChild(li);
+            });
+        }
+    } catch (e) { console.error(e); }
+}
+
+fetchInsights();
+setInterval(fetchInsights, 3000);
+
+async function contactPassenger(phone) {
+    if (!phone) {
+        await uiAlert('No phone number on file for this passenger.');
+        return;
+    }
+    const msg = await uiPrompt(
+        'Send a message to passenger (' + phone + '):\n\nType your message below:',
+        'Hello, regarding your lost item report — please contact us for an update.',
+        'Message passenger'
+    );
+    if (msg === null || msg === '') return;
+    const waUrl = `https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`;
+    window.open(waUrl, '_blank');
+}
+
+async function notifyDriver(busId) {
+    const msg = await uiPrompt(
+        `Send a notification to the driver of bus ${busId}:\n\nType your message below:`,
+        `A passenger reported a lost item on your bus (${busId}). Please check and contact us.`,
+        'Notify driver'
+    );
+    if (msg === null) return;
+    apiFetch(`${BASE}/api/adminSendMsg.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bus_id: busId, message: msg })
+    }).then(r => r.json()).then(d => {
+        if (d.success) showToast('Driver notified successfully via the in-app chat!', 'success');
+        else showToast('Could not notify driver: ' + (d.error || 'Unknown error'), 'error');
+    }).catch(() => showToast('Network error sending driver notification.', 'error'));
+}
+
+async function driverAction(driverId, action, newPassword = '') {
+    console.log('[driverAction] called with:', driverId, action);
+    try {
+        const res = await apiFetch(`${BASE}/api/adminDriverAction.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ driver_id: parseInt(driverId), action, new_password: newPassword })
+        });
+        const data = await res.json();
+        console.log('[driverAction] response:', data);
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        showToast('Driver ' + action + 'd successfully!', 'success');
+        fetchDrivers();
+    } catch (e) {
+        console.error('[driverAction] error:', e);
+        await uiAlert(e.message || 'Action failed');
+    }
+}
+
+async function resetPasswordPrompt(driverId) {
+    const np = await uiPrompt('Enter new password for this driver:', '', 'Reset password');
+    if (!np) return;
+    driverAction(driverId, 'reset_password', np);
+}
+
+
+async function updateAdminProfile() {
+    const u = document.getElementById('adminNewName').value;
+    const p = document.getElementById('adminNewPass').value;
+    const msg = document.getElementById('profileMsg');
+    msg.style.display = 'none';
+    msg.className = '';
+    try {
+        const res = await apiFetch(`${BASE}/api/updateAdmin.php`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({username: u, password: p})
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+            msg.innerText = "Updated successfully";
+            msg.style.color = "#10b981"; msg.style.display = "block";
+        } else {
+            msg.innerText = data.error; 
+            msg.style.color = "#f43f5e"; msg.style.display = "block";
+        }
+    } catch (e) {
+        msg.innerText = "Network Error";
+        msg.style.color = "#f43f5e"; msg.style.display = "block";
+    }
+}
+
+
+</script>
+</body>
+</html>

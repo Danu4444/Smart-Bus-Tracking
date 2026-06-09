@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Bus Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="page-portal">
+    <main class="portal-main">
+        <div class="card portal-card">
+            <h1>Smart Bus Tracker</h1>
+            <p>Choose your portal to continue</p>
+
+            <div class="btn-group-vertical">
+                <a id="linkPassenger" href="#" class="btn btn-primary">
+                    Passenger App
+                </a>
+
+                <a id="linkDriver" href="#" class="btn btn-primary">
+                    Driver App
+                </a>
+
+                <a id="linkAdmin" href="#" class="btn btn-primary">
+                    Admin Dashboard
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.getElementById('linkPassenger').href = 'passenger/passengerLogin.html';
+        document.getElementById('linkDriver').href = 'driver/driverLogin.html';
+        document.getElementById('linkAdmin').href = 'admin/adminLogin.html';
+    </script>
+</body>
+</html>
